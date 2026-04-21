@@ -1,0 +1,131 @@
+:root {
+  /* Phosphor PencilSimple (Regular), filled black. Hotspot at the tip (bottom-left). */
+  --pencil-cursor: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 256 256'><path fill='%23000' d='M227.31,73.37,182.63,28.69a16,16,0,0,0-22.63,0L36.69,152a15.86,15.86,0,0,0-4.69,11.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96A16,16,0,0,0,227.31,73.37ZM51.31,160l90.35-90.35L168,96.14l-90.34,90.35ZM48,179.31,76.69,208H48Zm48,25.38-27-27L179.31,67.31l27,27Zm96-114.69L168,65.94l24.34-24.35,26.35,26.35Z'/></svg>") 2 22, crosshair;
+}
+
+.stage {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  background: #ffffff;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.percent {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-weight: 600;
+  font-size: 58px;
+  letter-spacing: -2.32px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+
+.reload-wrap {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  animation: fadeInUp 180ms ease-out;
+  transition: opacity 500ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    transform 500ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  transform-origin: center;
+}
+
+.reload-wrap.is-fading {
+  opacity: 0;
+  transform: translateX(-50%) scale(0.96);
+  pointer-events: none;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 6px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+.reload-btn {
+  appearance: none;
+  border: none;
+  outline: none;
+  background: #f3f3f3;
+  width: 120px;
+  height: 48px;
+  border-radius: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #1c1c1c;
+  cursor: pointer;
+  transition: background-color 160ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.reload-btn:hover {
+  background: #e8e8e8;
+}
+
+.reload-btn:active {
+  background: #e0e0e0;
+}
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: -0.39px;
+  color: rgba(0, 0, 0, 0.58);
+  user-select: none;
+}
+
+.hint-or {
+  line-height: 16px;
+}
+
+.hint-key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.58);
+  line-height: 16px;
+}
+
+/* Particle burst canvas — rendered via requestAnimationFrame. */
+.particles-canvas {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
