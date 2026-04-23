@@ -183,10 +183,38 @@ function buildParticles(points) {
   })
 }
 
+const BURST_THRESHOLD = 95
+const BURST_RIPPLE_LIFE = 1100
+const BURST_RIPPLE_STAGGER = 220
+const BURST_RING_THICKNESS = 90
+const BURST_DISSOLVE_MS = 300
+const BURST_SHADES = [
+  'rgb(45, 157, 95)',
+  'rgb(98, 198, 143)',
+  'rgb(170, 226, 194)',
+]
+
+const SHIMMER_MIN = 85
+const SHIMMER_MAX = 94
+const SHIMMER_DURATION = 900
+
+// SHORTCUT: temporary dev-only test buttons. All shortcut code tagged for removal.
+const SHORTCUT_DURATION = 800
+const SHORTCUT_STEPS = 120
+
 export default function App() {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
+  const burstCanvasRef = useRef(null)
   const rafRef = useRef(0)
+  const burstRafRef = useRef(0)
+  const burstStartRef = useRef(0)
+  const burstDissolveAtRef = useRef(0)
+  const burstActiveRef = useRef(false)
+  const shimmerTimerRef = useRef(null)
+  // SHORTCUT: state for the auto-draw test buttons.
+  const shortcutRafRef = useRef(0)
+  const [simCursor, setSimCursor] = useState(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
   const [points, setPoints] = useState([])
   const [drawing, setDrawing] = useState(false)
@@ -194,6 +222,9 @@ export default function App() {
   const [percent, setPercent] = useState(0)
   const [resetKey, setResetKey] = useState(0)
   const [reloadState, setReloadState] = useState('hidden')
+  const [shimmerKey, setShimmerKey] = useState(0)
+  const [isShimmering, setIsShimmering] = useState(false)
+  const [shimmerMode, setShimmerMode] = useState('single')
 
   useEffect(() => {
     const update = () => {
@@ -206,25 +237,128 @@ export default function App() {
     return () => window.removeEventListener('resize', update)
   }, [])
 
-  // Size the particle canvas to match the stage (with DPR for crispness).
+  // Size the canvases to match the stage (with DPR for crispness).
   useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas || size.w === 0) return
+    if (size.w === 0) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = size.w * dpr
-    canvas.height = size.h * dpr
-    canvas.style.width = `${size.w}px`
-    canvas.style.height = `${size.h}px`
-    const ctx = canvas.getContext('2d')
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    for (const c of [canvasRef.current, burstCanvasRef.current]) {
+      if (!c) continue
+      c.width = size.w * dpr
+      c.height = size.h * dpr
+      c.style.width = `${size.w}px`
+      c.style.height = `${size.h}px`
+      const ctx = c.getContext('2d')
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+    // Pixelated rendering for the burst canvas — preserves square edges.
+    const bctx = burstCanvasRef.current?.getContext('2d')
+    if (bctx) bctx.imageSmoothingEnabled = false
   }, [size.w, size.h])
 
   const cx = size.w / 2
   const cy = size.h / 2
 
+  const dissolveBurst = useCallback(() => {
+    if (!burstActiveRef.current) return
+    if (burstDissolveAtRef.current > 0) return
+    burstDissolveAtRef.current = performance.now()
+  }, [])
+
+  const startShimmer = useCallback((mode = 'single') => {
+    if (shimmerTimerRef.current) clearTimeout(shimmerTimerRef.current)
+    setShimmerMode(mode)
+    setShimmerKey((k) => k + 1)
+    setIsShimmering(true)
+    shimmerTimerRef.current = setTimeout(() => {
+      setIsShimmering(false)
+      shimmerTimerRef.current = null
+    }, SHIMMER_DURATION)
+  }, [])
+
+  const stopShimmer = useCallback(() => {
+    if (shimmerTimerRef.current) clearTimeout(shimmerTimerRef.current)
+    shimmerTimerRef.current = null
+    setIsShimmering(false)
+  }, [])
+
+  const startBurst = useCallback(() => {
+    const canvas = burstCanvasRef.current
+    const ctx = canvas?.getContext('2d')
+    if (!ctx || size.w === 0) return
+    cancelAnimationFrame(burstRafRef.current)
+    burstStartRef.current = performance.now()
+    burstDissolveAtRef.current = 0
+    burstActiveRef.current = true
+
+    const maxR = Math.hypot(size.w, size.h) / 2 + 80
+    const total = BURST_RIPPLE_LIFE + BURST_RIPPLE_STAGGER * (BURST_SHADES.length - 1)
+    const centerX = size.w / 2
+    const centerY = size.h / 2
+
+    const loop = (now) => {
+      const t = now - burstStartRef.current
+
+      // Global alpha from optional dissolve.
+      let dissolveAlpha = 1
+      if (burstDissolveAtRef.current > 0) {
+        const dt = (now - burstDissolveAtRef.current) / BURST_DISSOLVE_MS
+        dissolveAlpha = Math.max(0, 1 - dt)
+      }
+
+      ctx.clearRect(0, 0, size.w, size.h)
+
+      const finishedNatural = t > total && burstDissolveAtRef.current === 0
+      const dissolveDone = burstDissolveAtRef.current > 0 && dissolveAlpha === 0
+      if (finishedNatural || dissolveDone) {
+        burstActiveRef.current = false
+        return
+      }
+
+      for (let i = 0; i < BURST_SHADES.length; i++) {
+        const localT = t - i * BURST_RIPPLE_STAGGER
+        if (localT < 0 || localT > BURST_RIPPLE_LIFE) continue
+        const progress = localT / BURST_RIPPLE_LIFE
+        const radius = progress * maxR
+        // Cell size oscillates — big → small → big → small, 2 cycles over life.
+        const cellSize = Math.round(16 + 4 * Math.sin(progress * Math.PI * 4))
+        // Bell envelope so ripples fade in and out smoothly.
+        const envelope = Math.sin(Math.PI * progress)
+        ctx.globalAlpha = envelope * dissolveAlpha
+        ctx.fillStyle = BURST_SHADES[i]
+
+        // Restrict the grid walk to the ring's bounding square.
+        const outer = radius + BURST_RING_THICKNESS / 2
+        const xMin = Math.max(0, Math.floor((centerX - outer) / cellSize) * cellSize)
+        const xMax = Math.min(size.w, Math.ceil((centerX + outer) / cellSize) * cellSize)
+        const yMin = Math.max(0, Math.floor((centerY - outer) / cellSize) * cellSize)
+        const yMax = Math.min(size.h, Math.ceil((centerY + outer) / cellSize) * cellSize)
+        const halfT = BURST_RING_THICKNESS / 2
+
+        for (let y = yMin; y < yMax; y += cellSize) {
+          const dy = y + cellSize / 2 - centerY
+          for (let x = xMin; x < xMax; x += cellSize) {
+            const dx = x + cellSize / 2 - centerX
+            const d = Math.sqrt(dx * dx + dy * dy)
+            if (Math.abs(d - radius) <= halfT) {
+              ctx.fillRect(x, y, cellSize, cellSize)
+            }
+          }
+        }
+      }
+      ctx.globalAlpha = 1
+
+      burstRafRef.current = requestAnimationFrame(loop)
+    }
+    burstRafRef.current = requestAnimationFrame(loop)
+  }, [size.w, size.h])
+
   const reset = useCallback(() => {
     if (reloadState === 'fading') return
     const RESET_DURATION = 500
+
+    // If a celebration effect is playing, start its dissolve in lockstep.
+    dissolveBurst()
+    stopShimmer()
 
     // Snapshot particles + stroke color BEFORE we clear state.
     const particles = buildParticles(points)
@@ -271,7 +405,7 @@ export default function App() {
       }
     }
     rafRef.current = requestAnimationFrame(animate)
-  }, [points, percent, reloadState, size.w, size.h])
+  }, [points, percent, reloadState, size.w, size.h, dissolveBurst, stopShimmer])
 
   useEffect(() => {
     const onKey = (e) => {
@@ -318,10 +452,107 @@ export default function App() {
 
   const endStroke = () => {
     if (!drawing) return
+    const finalPct = scoreCircle(points)
     setDrawing(false)
     setFinished(true)
-    setPercent(scoreCircle(points))
+    setPercent(finalPct)
+    if (finalPct >= BURST_THRESHOLD) {
+      startBurst()
+      startShimmer('double')
+    } else if (finalPct >= SHIMMER_MIN && finalPct <= SHIMMER_MAX) {
+      startShimmer('single')
+    }
   }
+
+  // SHORTCUT: build a circle of SHORTCUT_STEPS+1 points with tuned wobble.
+  // mode: 'high' → ~97%; 'mid' → random 86–89%.
+  const buildShortcutCircle = useCallback(
+    (mode) => {
+      const pts = []
+      let wobbleFn
+      if (mode === 'mid') {
+        // Randomize amplitude each click to land anywhere in the 86–89 band.
+        const amp1 = 5.5 + Math.random() * 3.5
+        const amp2 = amp1 * 0.5
+        const phase1 = Math.random() * Math.PI * 2
+        const phase2 = Math.random() * Math.PI * 2
+        wobbleFn = (theta) =>
+          Math.sin(theta * 5 + phase1) * amp1 +
+          Math.sin(theta * 11 + phase2) * amp2
+      } else {
+        // Default 'high' — tuned to land 97–98%.
+        wobbleFn = (theta) =>
+          Math.sin(theta * 5) * 0.9 + Math.sin(theta * 13 + 0.7) * 0.5
+      }
+      for (let i = 0; i <= SHORTCUT_STEPS; i++) {
+        const f = i / SHORTCUT_STEPS
+        const theta = -Math.PI / 2 + f * Math.PI * 2
+        const r = GUIDE_RADIUS + wobbleFn(theta)
+        pts.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) })
+      }
+      return pts
+    },
+    [cx, cy],
+  )
+
+  // SHORTCUT: auto-draw a circle. mode = 'high' | 'mid'.
+  const runShortcut = useCallback((mode = 'high') => {
+    if (drawing || simCursor) return
+    // If a previous drawing is on screen, dismiss it, then rerun after reset finishes.
+    if (finished || reloadState !== 'hidden') {
+      reset()
+      setTimeout(() => runShortcut(mode), 540)
+      return
+    }
+    cancelAnimationFrame(shortcutRafRef.current)
+    const pts = buildShortcutCircle(mode)
+    setDrawing(true)
+    setFinished(false)
+    setReloadState('visible')
+    setPoints([pts[0]])
+    setPercent(0)
+    setSimCursor(pts[0])
+
+    const t0 = performance.now()
+    const easeInOutCubic = (t) =>
+      t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
+
+    const tick = (now) => {
+      const t = Math.min(1, (now - t0) / SHORTCUT_DURATION)
+      const eased = easeInOutCubic(t)
+      const idx = Math.max(1, Math.round(eased * (pts.length - 1)))
+      const revealed = pts.slice(0, idx + 1)
+      setPoints(revealed)
+      setPercent(scoreCircle(revealed))
+      setSimCursor(pts[idx])
+
+      if (t < 1) {
+        shortcutRafRef.current = requestAnimationFrame(tick)
+      } else {
+        const finalPct = scoreCircle(pts)
+        setDrawing(false)
+        setFinished(true)
+        setPercent(finalPct)
+        setSimCursor(null)
+        if (finalPct >= BURST_THRESHOLD) {
+          startBurst()
+          startShimmer('double')
+        } else if (finalPct >= SHIMMER_MIN && finalPct <= SHIMMER_MAX) {
+          startShimmer('single')
+        }
+      }
+    }
+    shortcutRafRef.current = requestAnimationFrame(tick)
+  }, [
+    drawing,
+    simCursor,
+    finished,
+    reloadState,
+    buildShortcutCircle,
+    reset,
+    startBurst,
+    startShimmer,
+  ])
 
   const started = drawing || finished
   const color = useMemo(
@@ -343,6 +574,7 @@ export default function App() {
       onPointerCancel={endStroke}
       onPointerLeave={endStroke}
     >
+      <canvas ref={burstCanvasRef} className="burst-canvas" />
       {size.w > 0 && (
         <svg className="canvas" width={size.w} height={size.h}>
           <circle
@@ -373,7 +605,13 @@ export default function App() {
 
 
       <div
-        className="percent"
+        key={shimmerKey}
+        className={`percent${
+          isShimmering
+            ? ` is-shimmering${shimmerMode === 'double' ? ' is-shimmering-double' : ''}`
+            : ''
+        }`}
+        data-text={`${percent}%`}
         style={{ color, transition: 'color 120ms linear' }}
       >
         {percent}%
@@ -397,6 +635,39 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* SHORTCUT: virtual pencil cursor for auto-draw animation. */}
+      {simCursor && (
+        <div
+          className="sim-cursor"
+          style={{ left: simCursor.x, top: simCursor.y }}
+          aria-hidden="true"
+        >
+          <PencilIcon />
+        </div>
+      )}
+
+      {/* SHORTCUT: temporary test buttons. Hidden for commit — uncomment to re-enable. */}
+      {/*
+      <div className="shortcut-stack">
+        <button
+          type="button"
+          className="shortcut-btn"
+          onClick={() => runShortcut('high')}
+          aria-label="Auto-draw above 95%"
+        >
+          &gt;95%
+        </button>
+        <button
+          type="button"
+          className="shortcut-btn"
+          onClick={() => runShortcut('mid')}
+          aria-label="Auto-draw above 85%"
+        >
+          &gt;85%
+        </button>
+      </div>
+      */}
     </div>
   )
 }
@@ -417,6 +688,15 @@ function ReloadIcon() {
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+    </svg>
+  )
+}
+
+// SHORTCUT: Phosphor PencilSimple icon — matches the cursor SVG for visual continuity.
+function PencilIcon() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 256 256" fill="currentColor" aria-hidden="true">
+      <path d="M227.31,73.37,182.63,28.69a16,16,0,0,0-22.63,0L36.69,152a15.86,15.86,0,0,0-4.69,11.31V208a16,16,0,0,0,16,16H92.69A15.86,15.86,0,0,0,104,219.31L227.31,96A16,16,0,0,0,227.31,73.37ZM51.31,160l90.35-90.35L168,96.14l-90.34,90.35ZM48,179.31,76.69,208H48Zm48,25.38-27-27L179.31,67.31l27,27Zm96-114.69L168,65.94l24.34-24.35,26.35,26.35Z" />
     </svg>
   )
 }
