@@ -617,7 +617,7 @@ export default function App() {
             : ''
         }`}
         data-text={`${percent}%`}
-        style={{ color, transition: 'color 120ms linear' }}
+        style={{ color, fontSize: `${58 * scale}px`, transition: 'color 120ms linear' }}
       >
         {percent}%
       </div>
