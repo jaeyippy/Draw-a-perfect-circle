@@ -202,6 +202,21 @@ const SHIMMER_DURATION = 900
 const SHORTCUT_DURATION = 800
 const SHORTCUT_STEPS = 120
 
+function useResponsiveRadius() {
+  const [vw, setVw] = useState(window.innerWidth)
+  const [vh, setVh] = useState(window.innerHeight)
+  useEffect(() => {
+    const onResize = () => {
+      setVw(window.innerWidth)
+      setVh(window.innerHeight)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const radius = Math.min(220, (vw - 48) / 2, (vh - 48) / 2)
+  return { radius, scale: radius / 220, vw, vh }
+}
+
 export default function App() {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
@@ -215,9 +230,10 @@ export default function App() {
   // SHORTCUT: state for the auto-draw test buttons.
   const shortcutRafRef = useRef(0)
   const [simCursor, setSimCursor] = useState(null)
-  const [size, setSize] = useState({ w: 0, h: 0 })
   const [points, setPoints] = useState([])
   const [drawing, setDrawing] = useState(false)
+  const { radius, scale, vw, vh } = useResponsiveRadius()
+  const size = { w: vw, h: vh }
   const [finished, setFinished] = useState(false)
   const [percent, setPercent] = useState(0)
   const [resetKey, setResetKey] = useState(0)
@@ -225,17 +241,6 @@ export default function App() {
   const [shimmerKey, setShimmerKey] = useState(0)
   const [isShimmering, setIsShimmering] = useState(false)
   const [shimmerMode, setShimmerMode] = useState('single')
-
-  useEffect(() => {
-    const update = () => {
-      const el = containerRef.current
-      if (!el) return
-      setSize({ w: el.clientWidth, h: el.clientHeight })
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
 
   // Size the canvases to match the stage (with DPR for crispness).
   useEffect(() => {
