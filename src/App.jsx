@@ -579,47 +579,59 @@ export default function App() {
       onPointerCancel={endStroke}
       onPointerLeave={endStroke}
     >
-      <canvas ref={burstCanvasRef} className="burst-canvas" />
-      {size.w > 0 && (
-        <svg className="canvas" width={size.w} height={size.h}>
-          <circle
-            cx={cx}
-            cy={cy}
-            r={radius}
-            fill="none"
-            stroke="#d9d9d9"
-            strokeWidth={2}
-            strokeDasharray="6 10"
-            strokeLinecap="round"
-          />
-          {pathD && (
-            <path
-              key={resetKey}
-              d={pathD}
+      <div className="viewport-frame">
+        <canvas ref={burstCanvasRef} className="burst-canvas" />
+        {size.w > 0 && (
+          <svg className="canvas" width={size.w} height={size.h}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={radius}
               fill="none"
-              stroke={color}
-              strokeWidth={STROKE_WIDTH}
+              stroke="#d9d9d9"
+              strokeWidth={2}
+              strokeDasharray="6 10"
               strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ transition: 'stroke 120ms linear' }}
             />
-          )}
-        </svg>
-      )}
-      <canvas ref={canvasRef} className="particles-canvas" />
+            {pathD && (
+              <path
+                key={resetKey}
+                d={pathD}
+                fill="none"
+                stroke={color}
+                strokeWidth={STROKE_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transition: 'stroke 120ms linear' }}
+              />
+            )}
+          </svg>
+        )}
+        <canvas ref={canvasRef} className="particles-canvas" />
 
+        <div
+          key={shimmerKey}
+          className={`percent${
+            isShimmering
+              ? ` is-shimmering${shimmerMode === 'double' ? ' is-shimmering-double' : ''}`
+              : ''
+          }`}
+          data-text={`${percent}%`}
+          style={{ color, fontSize: `${58 * scale}px`, transition: 'color 120ms linear' }}
+        >
+          {percent}%
+        </div>
 
-      <div
-        key={shimmerKey}
-        className={`percent${
-          isShimmering
-            ? ` is-shimmering${shimmerMode === 'double' ? ' is-shimmering-double' : ''}`
-            : ''
-        }`}
-        data-text={`${percent}%`}
-        style={{ color, fontSize: `${58 * scale}px`, transition: 'color 120ms linear' }}
-      >
-        {percent}%
+        {/* SHORTCUT: virtual pencil cursor for auto-draw animation. */}
+        {simCursor && (
+          <div
+            className="sim-cursor"
+            style={{ left: simCursor.x, top: simCursor.y }}
+            aria-hidden="true"
+          >
+            <PencilIcon />
+          </div>
+        )}
       </div>
 
       {reloadState !== 'hidden' && (
@@ -638,17 +650,6 @@ export default function App() {
             <span className="hint-or">or</span>
             <span className="hint-key">tab</span>
           </div>
-        </div>
-      )}
-
-      {/* SHORTCUT: virtual pencil cursor for auto-draw animation. */}
-      {simCursor && (
-        <div
-          className="sim-cursor"
-          style={{ left: simCursor.x, top: simCursor.y }}
-          aria-hidden="true"
-        >
-          <PencilIcon />
         </div>
       )}
 
