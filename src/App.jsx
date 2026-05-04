@@ -432,7 +432,7 @@ export default function App() {
     if (finished || drawing) return
     const p = getPos(e)
     const dist = Math.hypot(p.x - cx, p.y - cy)
-    if (Math.abs(dist - GUIDE_RADIUS) > START_TOLERANCE) return
+    if (Math.abs(dist - radius) > START_TOLERANCE * scale) return
     try {
       e.currentTarget.setPointerCapture?.(e.pointerId)
     } catch {}
@@ -492,12 +492,12 @@ export default function App() {
       for (let i = 0; i <= SHORTCUT_STEPS; i++) {
         const f = i / SHORTCUT_STEPS
         const theta = -Math.PI / 2 + f * Math.PI * 2
-        const r = GUIDE_RADIUS + wobbleFn(theta)
+        const r = radius + wobbleFn(theta) * scale
         pts.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) })
       }
       return pts
     },
-    [cx, cy],
+    [cx, cy, radius, scale],
   )
 
   // SHORTCUT: auto-draw a circle. mode = 'high' | 'mid'.
@@ -585,7 +585,7 @@ export default function App() {
           <circle
             cx={cx}
             cy={cy}
-            r={GUIDE_RADIUS}
+            r={radius}
             fill="none"
             stroke="#d9d9d9"
             strokeWidth={2}
