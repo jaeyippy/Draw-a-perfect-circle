@@ -586,7 +586,6 @@ export default function App() {
       onPointerMove={onPointerMove}
       onPointerUp={endStroke}
       onPointerCancel={endStroke}
-      onPointerLeave={endStroke}
     >
       <div className="viewport-frame">
         <canvas ref={burstCanvasRef} className="burst-canvas" />
