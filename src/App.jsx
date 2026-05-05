@@ -202,6 +202,24 @@ const SHIMMER_DURATION = 900
 const SHORTCUT_DURATION = 800
 const SHORTCUT_STEPS = 120
 
+function useResponsiveRadius(drawing) {
+  const [vw, setVw] = useState(window.innerWidth)
+  const [vh, setVh] = useState(window.innerHeight)
+  const drawingRef = useRef(drawing)
+  useEffect(() => { drawingRef.current = drawing }, [drawing])
+  useEffect(() => {
+    const onResize = () => {
+      if (drawingRef.current) return
+      setVw(window.innerWidth)
+      setVh(window.innerHeight)
+    }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const radius = Math.min(220, (vw - 48) / 2, (vh - 48) / 2)
+  return { radius, scale: radius / 220, vw, vh }
+}
+
 export default function App() {
   const containerRef = useRef(null)
   const canvasRef = useRef(null)
@@ -215,9 +233,10 @@ export default function App() {
   // SHORTCUT: state for the auto-draw test buttons.
   const shortcutRafRef = useRef(0)
   const [simCursor, setSimCursor] = useState(null)
-  const [size, setSize] = useState({ w: 0, h: 0 })
   const [points, setPoints] = useState([])
   const [drawing, setDrawing] = useState(false)
+  const { radius, scale, vw, vh } = useResponsiveRadius(drawing)
+  const size = { w: vw, h: vh }
   const [finished, setFinished] = useState(false)
   const [percent, setPercent] = useState(0)
   const [resetKey, setResetKey] = useState(0)
@@ -225,17 +244,6 @@ export default function App() {
   const [shimmerKey, setShimmerKey] = useState(0)
   const [isShimmering, setIsShimmering] = useState(false)
   const [shimmerMode, setShimmerMode] = useState('single')
-
-  useEffect(() => {
-    const update = () => {
-      const el = containerRef.current
-      if (!el) return
-      setSize({ w: el.clientWidth, h: el.clientHeight })
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
 
   // Size the canvases to match the stage (with DPR for crispness).
   useEffect(() => {
@@ -418,6 +426,12 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [reloadState, reset])
 
+  useEffect(() => {
+    const lock = drawing || reloadState === 'hidden'
+    document.body.style.overflow = lock ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [drawing, reloadState])
+
   const getPos = (e) => {
     const rect = containerRef.current.getBoundingClientRect()
     return { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -427,7 +441,7 @@ export default function App() {
     if (finished || drawing) return
     const p = getPos(e)
     const dist = Math.hypot(p.x - cx, p.y - cy)
-    if (Math.abs(dist - GUIDE_RADIUS) > START_TOLERANCE) return
+    if (Math.abs(dist - radius) > START_TOLERANCE * scale) return
     try {
       e.currentTarget.setPointerCapture?.(e.pointerId)
     } catch {}
@@ -487,12 +501,12 @@ export default function App() {
       for (let i = 0; i <= SHORTCUT_STEPS; i++) {
         const f = i / SHORTCUT_STEPS
         const theta = -Math.PI / 2 + f * Math.PI * 2
-        const r = GUIDE_RADIUS + wobbleFn(theta)
+        const r = radius + wobbleFn(theta) * scale
         pts.push({ x: cx + r * Math.cos(theta), y: cy + r * Math.sin(theta) })
       }
       return pts
     },
-    [cx, cy],
+    [cx, cy, radius, scale],
   )
 
   // SHORTCUT: auto-draw a circle. mode = 'high' | 'mid'.
@@ -574,47 +588,59 @@ export default function App() {
       onPointerCancel={endStroke}
       onPointerLeave={endStroke}
     >
-      <canvas ref={burstCanvasRef} className="burst-canvas" />
-      {size.w > 0 && (
-        <svg className="canvas" width={size.w} height={size.h}>
-          <circle
-            cx={cx}
-            cy={cy}
-            r={GUIDE_RADIUS}
-            fill="none"
-            stroke="#d9d9d9"
-            strokeWidth={2}
-            strokeDasharray="6 10"
-            strokeLinecap="round"
-          />
-          {pathD && (
-            <path
-              key={resetKey}
-              d={pathD}
+      <div className="viewport-frame">
+        <canvas ref={burstCanvasRef} className="burst-canvas" />
+        {size.w > 0 && (
+          <svg className="canvas" width={size.w} height={size.h}>
+            <circle
+              cx={cx}
+              cy={cy}
+              r={radius}
               fill="none"
-              stroke={color}
-              strokeWidth={STROKE_WIDTH}
+              stroke="#d9d9d9"
+              strokeWidth={2}
+              strokeDasharray="6 10"
               strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ transition: 'stroke 120ms linear' }}
             />
-          )}
-        </svg>
-      )}
-      <canvas ref={canvasRef} className="particles-canvas" />
+            {pathD && (
+              <path
+                key={resetKey}
+                d={pathD}
+                fill="none"
+                stroke={color}
+                strokeWidth={STROKE_WIDTH}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ transition: 'stroke 120ms linear' }}
+              />
+            )}
+          </svg>
+        )}
+        <canvas ref={canvasRef} className="particles-canvas" />
 
+        <div
+          key={shimmerKey}
+          className={`percent${
+            isShimmering
+              ? ` is-shimmering${shimmerMode === 'double' ? ' is-shimmering-double' : ''}`
+              : ''
+          }`}
+          data-text={`${percent}%`}
+          style={{ color, fontSize: `${58 * scale}px`, transition: 'color 120ms linear' }}
+        >
+          {percent}%
+        </div>
 
-      <div
-        key={shimmerKey}
-        className={`percent${
-          isShimmering
-            ? ` is-shimmering${shimmerMode === 'double' ? ' is-shimmering-double' : ''}`
-            : ''
-        }`}
-        data-text={`${percent}%`}
-        style={{ color, transition: 'color 120ms linear' }}
-      >
-        {percent}%
+        {/* SHORTCUT: virtual pencil cursor for auto-draw animation. */}
+        {simCursor && (
+          <div
+            className="sim-cursor"
+            style={{ left: simCursor.x, top: simCursor.y }}
+            aria-hidden="true"
+          >
+            <PencilIcon />
+          </div>
+        )}
       </div>
 
       {reloadState !== 'hidden' && (
@@ -633,17 +659,6 @@ export default function App() {
             <span className="hint-or">or</span>
             <span className="hint-key">tab</span>
           </div>
-        </div>
-      )}
-
-      {/* SHORTCUT: virtual pencil cursor for auto-draw animation. */}
-      {simCursor && (
-        <div
-          className="sim-cursor"
-          style={{ left: simCursor.x, top: simCursor.y }}
-          aria-hidden="true"
-        >
-          <PencilIcon />
         </div>
       )}
 
