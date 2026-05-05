@@ -202,11 +202,14 @@ const SHIMMER_DURATION = 900
 const SHORTCUT_DURATION = 800
 const SHORTCUT_STEPS = 120
 
-function useResponsiveRadius() {
+function useResponsiveRadius(drawing) {
   const [vw, setVw] = useState(window.innerWidth)
   const [vh, setVh] = useState(window.innerHeight)
+  const drawingRef = useRef(drawing)
+  useEffect(() => { drawingRef.current = drawing }, [drawing])
   useEffect(() => {
     const onResize = () => {
+      if (drawingRef.current) return
       setVw(window.innerWidth)
       setVh(window.innerHeight)
     }
@@ -232,7 +235,7 @@ export default function App() {
   const [simCursor, setSimCursor] = useState(null)
   const [points, setPoints] = useState([])
   const [drawing, setDrawing] = useState(false)
-  const { radius, scale, vw, vh } = useResponsiveRadius()
+  const { radius, scale, vw, vh } = useResponsiveRadius(drawing)
   const size = { w: vw, h: vh }
   const [finished, setFinished] = useState(false)
   const [percent, setPercent] = useState(0)
@@ -422,6 +425,12 @@ export default function App() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [reloadState, reset])
+
+  useEffect(() => {
+    const lock = drawing || reloadState === 'hidden'
+    document.body.style.overflow = lock ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [drawing, reloadState])
 
   const getPos = (e) => {
     const rect = containerRef.current.getBoundingClientRect()
